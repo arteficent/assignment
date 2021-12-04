@@ -5,3 +5,8 @@ export interface IGetUserAuthInfoRequest extends Request {
 export interface MyObjLayout {
     name: string;
 }
+export interface userObj {
+    name: string;
+    username: string;
+    password: string;
+}
