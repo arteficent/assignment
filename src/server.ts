@@ -9,57 +9,23 @@ app.use(express.json())
 require('dotenv').config()
 const port = 5000
 
-// Database
+// Database Connections
 const admin = require('firebase-admin');
-var serviceAccount = require('../admin.json');
+const serviceAccount = require('../admin.json');
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
     databaseURL: "https://forward-robot-321816-default-rtdb.asia-southeast1.firebasedatabase.app"
 });
+const db = admin.database();
+const databaseRef = db.ref("database");
 
-
-var db = admin.database();
-var databaseRef = db.ref("database");
-
-//users model
-var usersRef = databaseRef.child("users");
-var transactionsRef = databaseRef.child('transactions');
-
-function addUser(localUserObj: userObj, res: Response): void {
-    var oneUser = usersRef.child(localUserObj.username);
-    oneUser.update(localUserObj, (err: any) => {
-        if (err) {
-            throw new Error();
-        }
-    }).catch((err: any) => {
-        throw new Error();
-    })
-}
-
-function getUsers(): void {
-    usersRef.once('value', function (snap: any) {
-        console.log({ "users": snap.val() });
-    })
-}
-// print data
-
-
-
-
-const arr = [
-    {
-        name: 'sourabh',
-        title: 'mr'
-    },
-    {
-        name: 'mitshua',
-        title: 'ms'
-    }
-]
+//models
+const usersRef = databaseRef.child("users");
+const transactionsRef = databaseRef.child('transactions');
 
 // Functions
-function generateAccessToken(user: MyObjLayout) {
-    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET)
+function generateAccessToken(username: string) {
+    return jwt.sign(username, process.env.ACCESS_TOKEN_SECRET)
 }
 function authenticateToken(req: IGetUserAuthInfoRequest, res: Response, next: () => void) {
     const authHeader = req.headers['authorization']
@@ -67,10 +33,10 @@ function authenticateToken(req: IGetUserAuthInfoRequest, res: Response, next: ()
     if (token == null)
         return res.sendStatus(401);
 
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err: boolean, user: MyObjLayout) => {
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err: any, username: string) => {
         if (err)
             return res.sendStatus(403);
-        req.user = user
+        req.username = username
         next()
     })
 }
@@ -88,7 +54,14 @@ app.post('/register', async (req, res) => {
         password: hash
     }
     try {
-        await addUser(localObj, res);
+        var oneUser = usersRef.child(localObj.username);
+        oneUser.update(localObj, (err: any) => {
+            if (err) {
+                throw new Error();
+            }
+        }).catch((err: any) => {
+            throw new Error();
+        })
         res.status(200).json({ "msg": "user created sucessfully" });
     }
     catch (err: any) {
@@ -97,7 +70,7 @@ app.post('/register', async (req, res) => {
 
 })
 
-app.post('/transaction', async (req, res) => {
+app.post('/transaction', authenticateToken, async (req, res) => {
     const localObj: userObj = req.body;
     try {
         var temp = transactionsRef.child(localObj.username);
@@ -120,13 +93,28 @@ app.post('/transaction', async (req, res) => {
 })
 
 app.post('/login', (req, res) => {
-    //Authentication User
-    const username = req.body.username
-    const user: MyObjLayout = { name: username }
-    const accessToken = generateAccessToken(user)
-    res.json({ accessToken: accessToken })
-})
-app.get('/arr', authenticateToken, (req: IGetUserAuthInfoRequest, res: Response) => {
-    res.json(arr.filter(arr => arr.name === req.user.name))
+    const username = req.body.username;
+    const password = req.body.password;
+    if (!username || !password)
+        return res.sendStatus(400).json('Incomplete request')
+    try {
+        const localUser = usersRef.child(username);
+        localUser.once('value', function (snap: any) {
+            const isValid = bcrypt.compareSync(password, snap.val().password);
+            //console.log(isValid, password, snap.val().password);
+            if (isValid) {
+                const accessToken = generateAccessToken(username);
+                //console.log(accessToken);
+                res.status(200).json({ accessToken: accessToken });
+            }
+            else {
+                res.status(400).json({ "msg": "wrong credentials" });
+            }
+        })
+    }
+    catch (err: any) {
+        console.log(err);
+        res.status(500).json({ "msg": "Something went wrong", "error": err });
+    }
 })
 app.listen(port, () => console.log(`Running on port ${port}`))
