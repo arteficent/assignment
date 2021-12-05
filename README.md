@@ -4,7 +4,7 @@ A simple express app based on simple transaction model
 
 clone repo with `https://github.com/arteficent/assignment.git`  
 open terminal in repo destination  
-run command `npm run dev`
+run command `npm start` or `npm run dev`
 
 API routes
 
